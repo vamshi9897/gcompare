@@ -1,0 +1,233 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// Platforms (Amazon, Flipkart, Zepto, etc.)
+model Platform {
+  id          String         @id @default(cuid())
+  name        String         @unique
+  displayName String
+  type        PlatformType
+  baseUrl     String
+  apiUrl      String?
+  affiliateId String?
+  isActive    Boolean        @default(true)
+  logoUrl     String?
+  products    ProductPrice[]
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
+
+  @@index([type, isActive])
+}
+
+enum PlatformType {
+  E_COMMERCE
+  QUICK_COMMERCE
+}
+
+// Categories
+model Category {
+  id        String     @id @default(cuid())
+  name      String     @unique
+  slug      String     @unique
+  parent    Category?  @relation("CategoryHierarchy", fields: [parentId], references: [id])
+  parentId  String?
+  children  Category[] @relation("CategoryHierarchy")
+  products  Product[]
+  icon      String?
+  imageUrl  String?
+  createdAt DateTime   @default(now())
+
+  @@index([parentId])
+}
+
+// Products
+model Product {
+  id           String         @id @default(cuid())
+  title        String
+  description  String?        @db.Text
+  brand        String?
+  category     Category       @relation(fields: [categoryId], references: [id])
+  categoryId   String
+  imageUrl     String?
+  images       String[]       @default([])
+  specifications Json?
+  rating       Float?
+  reviewCount  Int            @default(0)
+  prices       ProductPrice[]
+  priceHistory PriceHistory[]
+  reviews      Review[]
+  alerts       PriceAlert[]
+  favorites    Favorite[]
+  promoted     Boolean        @default(false)
+  createdAt    DateTime       @default(now())
+  updatedAt    DateTime       @updatedAt
+
+  @@index([categoryId])
+  @@index([brand])
+  @@index([rating])
+  @@index([promoted])
+  @@index([title])
+}
+
+// Product Prices per Platform
+model ProductPrice {
+  id            String   @id @default(cuid())
+  productId     String
+  product       Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  platformId    String
+  platform      Platform @relation(fields: [platformId], references: [id], onDelete: Cascade)
+  externalId    String
+  price         Float
+  originalPrice Float?
+  inStock       Boolean  @default(true)
+  currency      String   @default("INR")
+  affiliateUrl  String   @db.Text
+  availability  String?
+  lastCheckedAt DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@unique([platformId, externalId])
+  @@index([productId])
+  @@index([price])
+  @@index([inStock])
+}
+
+// Price History
+model PriceHistory {
+  id         String   @id @default(cuid())
+  productId  String
+  product    Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  platformId String
+  price      Float
+  recordedAt DateTime @default(now())
+
+  @@index([productId, recordedAt])
+}
+
+// Reviews (aggregated from platforms)
+model Review {
+  id               String   @id @default(cuid())
+  productId        String
+  product          Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  platform         String
+  platformReviewId String?
+  author           String?
+  rating           Int
+  title            String?
+  content          String?  @db.Text
+  verified         Boolean  @default(false)
+  helpfulCount     Int      @default(0)
+  createdAt        DateTime
+  scrapedAt        DateTime @default(now())
+
+  @@index([productId])
+  @@index([rating])
+}
+
+// Users
+model User {
+  id           String         @id @default(cuid())
+  email        String         @unique
+  password     String
+  name         String?
+  avatar       String?
+  isPremium    Boolean        @default(false)
+  premiumUntil DateTime?
+  alerts       PriceAlert[]
+  favorites    Favorite[]
+  clickHistory ClickHistory[]
+  createdAt    DateTime       @default(now())
+  updatedAt    DateTime       @updatedAt
+
+  @@index([email])
+}
+
+// Price Alerts
+model PriceAlert {
+  id          String    @id @default(cuid())
+  userId      String
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  productId   String
+  product     Product   @relation(fields: [productId], references: [id], onDelete: Cascade)
+  targetPrice Float
+  isActive    Boolean   @default(true)
+  triggered   Boolean   @default(false)
+  triggeredAt DateTime?
+  createdAt   DateTime  @default(now())
+
+  @@index([userId])
+  @@index([productId])
+  @@index([isActive])
+}
+
+// Favorites
+model Favorite {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  productId String
+  product   Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+
+  @@unique([userId, productId])
+  @@index([userId])
+}
+
+// Affiliate Click Tracking (for monetization)
+model ClickHistory {
+  id           String      @id @default(cuid())
+  userId       String?
+  user         User?       @relation(fields: [userId], references: [id], onDelete: SetNull)
+  productId    String
+  platformId   String
+  affiliateUrl String      @db.Text
+  commission   Float?
+  status       ClickStatus
+  createdAt    DateTime    @default(now())
+
+  @@index([userId])
+  @@index([productId])
+  @@index([createdAt])
+}
+
+enum ClickStatus {
+  PENDING
+  CONFIRMED
+  REJECTED
+}
+
+// Advertisements
+model Advertisement {
+  id          String     @id @default(cuid())
+  title       String
+  imageUrl    String
+  linkUrl     String     @db.Text
+  position    AdPosition
+  isActive    Boolean    @default(true)
+  impressions Int        @default(0)
+  clicks      Int        @default(0)
+  startDate   DateTime
+  endDate     DateTime
+  createdAt   DateTime   @default(now())
+
+  @@index([position])
+  @@index([isActive])
+  @@index([startDate, endDate])
+}
+
+enum AdPosition {
+  HOME_HERO
+  HOME_SIDEBAR
+  SEARCH_TOP
+  SEARCH_SIDEBAR
+  PRODUCT_PAGE_TOP
+  PRODUCT_PAGE_SIDEBAR
+}
